@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Prediction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Reconnaissance Vocale</h1>
+        <p>Envoyez ou enregistrez un fichier audio pour analyse</p>
+        <input type="file" id="audioFile">
+        <button onclick="uploadFile()">Envoyer</button>
+        <br>
+        <button onclick="startRecording()">🎤 Enregistrer</button>
+        <button onclick="stopRecording()" disabled>🛑 Arrêter</button>
+        <p id="result"></p>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+
+        function uploadFile() {
+            let fileInput = document.getElementById('audioFile');
+            if (fileInput.files.length === 0) {
+                alert("Veuillez sélectionner un fichier");
+                return;
+            }
+            
+            let formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            
+            fetch("/predict", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("result").innerText = "Résultat: " + (data.prediction || data.error);
+            })
+            .catch(error => {
+                console.error("Erreur:", error);
+                document.getElementById("result").innerText = "Erreur lors de l'envoi";
+            });
+        }
+
+        function startRecording() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.start();
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const formData = new FormData();
+                        formData.append("file", audioBlob, "recording.wav");
+                        fetch("/predict", {
+                            method: "POST",
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            document.getElementById("result").innerText = "Résultat: " + (data.prediction || data.error);
+                        })
+                        .catch(error => {
+                            console.error("Erreur:", error);
+                            document.getElementById("result").innerText = "Erreur lors de l'enregistrement";
+                        });
+                    };
+                    document.querySelector("button[onclick='stopRecording()']").disabled = false;
+                });
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            document.querySelector("button[onclick='stopRecording()']").disabled = true;
+        }
+    </script>
+</body>
+</html>
