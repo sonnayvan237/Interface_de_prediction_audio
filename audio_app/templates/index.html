@@ -15,6 +15,7 @@
         <br>
         <button onclick="startRecording()">🎤 Enregistrer</button>
         <button onclick="stopRecording()" disabled>🛑 Arrêter</button>
+        <p id="loading" style="display: none; color: blue;">🔄 Analyse en cours...</p>
         <p id="result"></p>
     </div>
 
@@ -28,22 +29,11 @@
                 alert("Veuillez sélectionner un fichier");
                 return;
             }
-            
+
             let formData = new FormData();
             formData.append("file", fileInput.files[0]);
-            
-            fetch("/predict", {
-                method: "POST",
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById("result").innerText = "Résultat: " + (data.prediction || data.error);
-            })
-            .catch(error => {
-                console.error("Erreur:", error);
-                document.getElementById("result").innerText = "Erreur lors de l'envoi";
-            });
+
+            sendAudioToServer(formData);
         }
 
         function startRecording() {
@@ -52,34 +42,74 @@
                     mediaRecorder = new MediaRecorder(stream);
                     mediaRecorder.start();
                     audioChunks = [];
+        
                     mediaRecorder.ondataavailable = event => {
                         audioChunks.push(event.data);
                     };
+        
                     mediaRecorder.onstop = () => {
                         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                        const formData = new FormData();
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        
+                        // ✅ Ajouter un lecteur audio sur la page
+                        let audioPlayer = document.createElement("audio");
+                        audioPlayer.controls = true;
+                        audioPlayer.src = audioUrl;
+                        document.body.appendChild(audioPlayer);
+        
+                        let formData = new FormData();
                         formData.append("file", audioBlob, "recording.wav");
-                        fetch("/predict", {
-                            method: "POST",
-                            body: formData
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            document.getElementById("result").innerText = "Résultat: " + (data.prediction || data.error);
-                        })
-                        .catch(error => {
-                            console.error("Erreur:", error);
-                            document.getElementById("result").innerText = "Erreur lors de l'enregistrement";
-                        });
+        
+                        sendAudioToServer(formData);
                     };
+        
                     document.querySelector("button[onclick='stopRecording()']").disabled = false;
+                })
+                .catch(error => {
+                    console.error("Erreur d'accès au micro:", error);
+                    alert("Erreur d'accès au micro. Vérifiez vos permissions.");
                 });
         }
+        
 
         function stopRecording() {
             mediaRecorder.stop();
             document.querySelector("button[onclick='stopRecording()']").disabled = true;
+        
+            mediaRecorder.onstop = function () {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });  // ✅ Assurer WAV
+                const audioUrl = URL.createObjectURL(audioBlob);
+        
+                let audioPlayer = document.createElement("audio");
+                audioPlayer.controls = true;
+                audioPlayer.src = audioUrl;
+                document.body.appendChild(audioPlayer);
+        
+                let formData = new FormData();
+                formData.append("file", audioBlob, "recording.wav");
+                sendAudioToServer(formData);
+            };
         }
+        
+        
+        function sendAudioToServer(formData) {
+            document.getElementById("result").innerText = "⏳ Analyse en cours...";
+            
+            fetch("/predict", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // ✅ Afficher le résultat correctement
+                document.getElementById("result").innerText = "✅ Résultat: " + (data.prediction || data.error);
+            })
+            .catch(error => {
+                console.error("Erreur:", error);
+                document.getElementById("result").innerText = "❌ Erreur d'envoi.";
+            });
+        }
+        
     </script>
 </body>
 </html>
